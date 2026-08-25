@@ -68,6 +68,40 @@ router.post('/', (req: AuthedRequest, res: Response) => {
   }
 });
 
+router.post('/bulk', (req: AuthedRequest, res: Response) => {
+  try {
+    const tasksArray = req.body?.tasks;
+    if (!Array.isArray(tasksArray)) {
+      throw new ValidationError('INVALID_FIELD', 'tasks must be an array', { field: 'tasks' });
+    }
+    if (tasksArray.length === 0) {
+      throw new ValidationError('INVALID_FIELD', 'tasks array cannot be empty', { field: 'tasks' });
+    }
+
+    const createdTasks = tasksArray.map((item: unknown, index: number) => {
+      const title = requireString((item as Record<string, unknown>)?.title, `tasks[${index}].title`);
+      const description = optionalString((item as Record<string, unknown>)?.description, `tasks[${index}].description`) ?? '';
+      const dueDate = requireISODate((item as Record<string, unknown>)?.dueDate, `tasks[${index}].dueDate`);
+      const cost = optionalNumber((item as Record<string, unknown>)?.cost, `tasks[${index}].cost`) ?? 0;
+      return taskService.create({
+        userId: req.userId as string,
+        title,
+        description,
+        dueDate,
+        cost,
+      });
+    });
+
+    res.status(201).json({ tasks: createdTasks });
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      res.status(400).json(errorEnvelope(err.code, err.message, err.details));
+      return;
+    }
+    throw err;
+  }
+});
+
 router.patch('/:id', (req: AuthedRequest, res: Response) => {
   const existing = taskService.getById(req.params.id);
   if (!existing) {
